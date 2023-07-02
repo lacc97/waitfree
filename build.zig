@@ -10,6 +10,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe.addAnonymousModule("divide", .{ .source_file = std.Build.FileSource.relative("lib/divide-zig/divide.zig") });
+    exe.linkLibC();
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
