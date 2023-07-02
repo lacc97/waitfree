@@ -1,3 +1,6 @@
 [submodule "lib/libdivide"]
 	path = lib/libdivide
 	url = https://github.com/ridiculousfish/libdivide.git
+[submodule "lib/divide-zig"]
+	path = lib/divide-zig
+	url = https://github.com/lacc97/divide-zig.git
