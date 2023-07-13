@@ -4,6 +4,8 @@ const Atomic = std.atomic.Atomic;
 
 const Divider = @import("divide").Divider;
 
+const TID = @import("../reclamation.zig").TID;
+
 pub fn Domain(comptime T: type) type {
     return struct {
         // -- Fields --
@@ -47,21 +49,21 @@ pub fn Domain(comptime T: type) type {
 
         pub fn init(
             allocator: std.mem.Allocator,
-            max_task_count: usize,
+            max_task_count: u32,
             max_he_count: usize,
             epoch_freq: u64,
             empty_freq: u64,
         ) !@This() {
             const tl = try allocator.alignedAlloc(TaskLocal, std.atomic.cache_line, max_task_count);
 
-            var i: usize = 0;
+            var i: u32 = 0;
             errdefer {
                 for (0..i) |j| {
                     allocator.free(tl[j].reservations[0..max_he_count]);
                 }
                 allocator.free(tl);
             }
-            while (i < tl.len) : (i += 1) {
+            while (i < max_task_count) : (i += 1) {
                 tl[i].reservations = (try allocator.alloc(Atomic(u64), max_he_count)).ptr;
                 for (tl[i].reservations[0..max_he_count]) |*r| {
                     r.store(infinite_epoch, .Release);
@@ -98,13 +100,13 @@ pub fn Domain(comptime T: type) type {
             self.allocator.free(self.task_local);
         }
 
-        pub fn alloc(self: *@This(), tid: usize) !*T {
-            self.task_local[tid].alloc_counter += 1;
+        pub fn alloc(self: *@This(), tid: TID) !*T {
+            self.task_local[@intFromEnum(tid)].alloc_counter += 1;
 
             // Check that the alloc_counter is fully divisible by epoch_freq * max_task_count
             const should_advance_epoch = should_advance: {
-                const q = self.epoch_freq_divider.divTrunc(self.task_local[tid].alloc_counter);
-                break :should_advance (q * self.epoch_freq * self.max_task_count) == self.task_local[tid].alloc_counter;
+                const q = self.epoch_freq_divider.divTrunc(self.task_local[@intFromEnum(tid)].alloc_counter);
+                break :should_advance (q * self.epoch_freq * self.max_task_count) == self.task_local[@intFromEnum(tid)].alloc_counter;
             };
             if (should_advance_epoch) _ = self.epoch.fetchAdd(1, .AcqRel);
 
@@ -114,8 +116,8 @@ pub fn Domain(comptime T: type) type {
             return &node.data.value;
         }
 
-        pub fn read(self: *@This(), tid: usize, index: usize, atomic_ptr: *Atomic(?*T)) ?*T {
-            const tl = &self.task_local[tid];
+        pub fn read(self: *@This(), tid: TID, index: usize, atomic_ptr: *Atomic(?*T)) ?*T {
+            const tl = &self.task_local[@intFromEnum(tid)];
             var prev_epoch = tl.reservations[index].load(.Acquire);
             while (true) {
                 const ptr = atomic_ptr.load(.Acquire);
@@ -129,10 +131,10 @@ pub fn Domain(comptime T: type) type {
             }
         }
 
-        pub fn retire(self: *@This(), tid: usize, ptr: ?*T) void {
+        pub fn retire(self: *@This(), tid: TID, ptr: ?*T) void {
             if (ptr == null) return;
 
-            const tl = &self.task_local[tid];
+            const tl = &self.task_local[@intFromEnum(tid)];
 
             const brock = &tl.retired;
 
@@ -165,8 +167,8 @@ pub fn Domain(comptime T: type) type {
 
         // -- Private functions --
 
-        fn emptyTrash(self: *@This(), tid: usize) void {
-            const brock = &self.task_local[tid].retired;
+        fn emptyTrash(self: *@This(), tid: TID) void {
+            const brock = &self.task_local[@intFromEnum(tid)].retired;
 
             var cur = brock.first;
             while (cur) |node| {
