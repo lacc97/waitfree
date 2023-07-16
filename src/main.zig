@@ -4,7 +4,7 @@ const reclamations = @import("primitives/reclamation.zig");
 
 const arxiv1510_00116 = @import("arxiv1510_00116.zig");
 
-const max_tasks = 8;
+const max_tasks = 12;
 const max_he_count = 48;
 
 pub fn main() !void {
